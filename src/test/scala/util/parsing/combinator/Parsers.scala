@@ -402,9 +402,10 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
     }
   
   def getRepGen(s: String, sep: String): Gen[String] = {
-    for (n <- Gen.choose(0, 1000)) yield List.fill(n)(s) mkString sep
+    for (n <- Gen.choose(0, 50)) yield List.fill(n)(s) mkString sep
   }
   
+  /*
   property("rep of regex accepts any repetition of string in its language") =
     reAllProp1(
       (re: Regex, s: String) =>
@@ -416,6 +417,18 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 	  }
 	}
       })
+  */
+  
+  property("repN of regex accepts n repetitions of string in its language") =
+    reAllProp1(
+      (re: Regex, s: String) =>
+	Prop.forAll(Gen.choose(1, 50)) {
+	  n: Int =>
+	    parseAll(repN(n, re), s*n) match {
+	      case Success(_, _) => true
+	      case NoSuccess(_, _) => false
+	    }
+	})
   
   property("repsep of regex accepts any repetition of string in its language") =
     reAllProp1(
@@ -433,27 +446,36 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 	     of regexes or first regex (if all input consumed)""") =
     reAllProp2(
       (re1: Regex, re2: Regex, s1: String, s2:String) =>
-	parseAll((re1~re2) | re1, s1 + s2) match {
+	parseAll(re1~re2, s1 + s2) match {
 	  case Success(_, rest) => rest atEnd
-	  case NoSuccess(_, _) => false
+	  case NoSuccess(_, _) => parseAll(re1, s1 + s2) match {
+	    case Success(res, _) => res == s1+s2
+	    case NoSuccess(_, _) => false
+	  }
 	})
   
   property("""Cat of regex languages accepted by either ~>
 	     of regexes or first regex (if all input consumed)""") =
     reAllProp2(
       (re1: Regex, re2: Regex, s1: String, s2:String) =>
-	parseAll((re1 ~> re2) | re1, s1 + s2) match {
+	parseAll(re1 ~> re2, s1 + s2) match {
 	  case Success(res, _) => s2 endsWith res
-	  case NoSuccess(_, _) => false
+	  case NoSuccess(_, _) => parseAll(re1, s1+s2) match {
+	    case Success(res, _) => res == s1+s2
+	    case NoSuccess(_, _) => false
+	  }
 	})
   
   property("""Cat of regex languages accepted by either <~
 	     of regexes or first regex (if all input consumed)""") =
     reAllProp2(
       (re1: Regex, re2: Regex, s1: String, s2:String) =>
-	parseAll((re1 <~ re2) | re1, s1 + s2) match {
+	parseAll(re1 <~ re2, s1 + s2) match {
 	  case Success(res, _) => res startsWith s1
-	  case NoSuccess(_, _) => false
+	  case NoSuccess(_, _) => parseAll(re1, s1+s2) match {
+	    case Success(res, _) => res == s1+s2
+	    case NoSuccess(_, _) => false
+	  }
 	})
   
   property("~ of two literal parsers accepts concatenation") =
