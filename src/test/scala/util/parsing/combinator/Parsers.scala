@@ -31,11 +31,11 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   
   // Characters that have special meaning in character classes.
   // These must be escaped if treated as literals.
-  val ccSpecialChars = """[].&-$@!#+\"{}<|^""" toList
+  val ccSpecialChars = """[].&-$@!#+\"{}<>%`|^""" toList
   val funnyWSMap = Map('\t' -> "\\t", '\f' -> "\\f",
 		       '\n' -> "\\n", '\r' -> "\\r",
 		       11.toChar -> "\\x0B")
-  val specialChars = """[].&$&^\?(){}|+*""" toList
+  val specialChars = """[].&$&^\?(){}|+*`<>%""" toList
   
   // The set of all printable ascii characters.  Ignoring new-lines, having
   // trouble with those.
@@ -238,7 +238,7 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   lazy val reCCSetGen : Gen[CharClass] =
       Gen.someOf(allPrAscChars).map[CharClass](
 	  (ccSet: Seq[Char]) =>
-	    CCArbitrary(Set(ccSet.toList: _*)))
+	    CCArbitrary(ccSet toSet))
   
   lazy val reCCPredefGen : Gen[CharClass] =
     Gen.pick(1, predefMap keySet).map[CharClass](
@@ -252,7 +252,9 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
    * Only generates literals and pre-defined character classes for now.
    */
   lazy val reCCGen : Gen[CharClass] =
-    Gen.frequency((10, Gen.lzy(reCCLiteralGen)), (1, Gen.lzy(reCCPredefGen)))
+    Gen.frequency((10, Gen.lzy(reCCLiteralGen)), 
+		  (1, Gen.lzy(reCCSetGen)),
+		  (1, Gen.lzy(reCCPredefGen)))
   
   /*
    * Generator for unary operations.
@@ -345,7 +347,7 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   /*
    * This property does not necessarily hold.  For combinator properties,
    * check if both regular expressions accept their input strings, then
-   * commence testing.
+   * commence testing (see reAllProp1 and reAllProp2).
    */
   property("getAcceptStrGen only generates accepted strings") = Prop.forAll {
     r: RegExpAbs => {
@@ -426,7 +428,7 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   def amtConsumed(re: Regex, s: String): Int =
     parse(re, s) match {
       case Success(res, _) => res.length
-      case NoSuccess(_, rest) => 0
+      case NoSuccess(res, rest) => 0
     }
   
   property("""repN of regex accepts n repetitions of string in its language,
@@ -448,14 +450,18 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   property("repsep of regex accepts repetition of string in its language") =
     reAllProp1(
       (re: Regex, s: String) =>
-      Prop.forAll(getRepGen(s, "~")) {
-	reps: String => {
-	  parseAll(repsep(re, "~"), reps) match {
-	    case Success(_, _) => true
-	    case NoSuccess(_, _) => false
+      Prop.forAll {
+	sep: Char =>
+	  Prop.forAll(getRepGen(s, sep)) {
+	    reps: String => {
+	      parseAll(repsep(re, "~"), reps) match {
+		case Success(_, _) => true
+		case NoSuccess(_, _) => false
+	      }
+	    }
 	  }
-	}
-      })
+      }
+    )
   
   property("Or of regex accepts strings in either language") =
     reAllProp2(
