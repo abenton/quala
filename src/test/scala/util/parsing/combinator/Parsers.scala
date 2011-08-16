@@ -13,8 +13,6 @@ import scala.util.parsing.combinator._
 /*
  * TODO:
  * -- Generalize regular expression generator
- * -- Union/Intersection/Negation/Ranges of character classes
- * -- Method to collect stats on depth and breadth of regexes
  * -- Reluctant/Possessive quantifiers, only greedy generated for now
  * -- Look ahead/look behind?
  * -- ***Figure out which generated strings are not accepted***
@@ -39,8 +37,9 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   
   // The set of all printable ascii characters.  Ignoring new-lines, having
   // trouble with those.
-  val allPrAscChars = (9 :: List.range(32, 127)).
-		      map (_.toChar) toSet
+  //val allPrAscChars = (9 :: List.range(32, 127)).
+  //		      map (_.toChar) toSet
+  val allPrAscChars = (0 to 255) map (_.toChar) toSet
   //val allPrAscChars = (((9 until 14) toList) ::: List.range(32, 127)).
   //	      map (_.toChar) toSet
   
