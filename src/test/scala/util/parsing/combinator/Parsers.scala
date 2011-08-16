@@ -31,11 +31,11 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   
   // Characters that have special meaning in character classes.
   // These must be escaped if treated as literals.
-  val ccSpecialChars = """[].&-$@!#+\"{}<>%`|^""" toList
+  val ccSpecialChars = """[].&-$@!#+\"{}<>%`|^""".toList.toSet
   val funnyWSMap = Map('\t' -> "\\t", '\f' -> "\\f",
 		       '\n' -> "\\n", '\r' -> "\\r",
 		       11.toChar -> "\\x0B")
-  val specialChars = """[].&$&^\?(){}|+*`<>%""" toList
+  val specialChars = """[].&$&^\?(){}|+*`<>%""".toList.toSet
   
   // The set of all printable ascii characters.  Ignoring new-lines, having
   // trouble with those.
@@ -64,7 +64,6 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 		      'nonWSpace -> ("\\S", SAscChars))
   
   // Valid unary operations for unary operations.
-  //val unOps = List('star, 'plus, 'qMark)
   val unOps = Map('star -> "*", 'plus -> "+", 'qMark -> "?")
   
   // Valid binary operations for regular expressions.
@@ -76,10 +75,15 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
    * code 127 and whitespace characters as the entire set of characters.
    */
   sealed abstract class CharClass extends RegExpAbs
-  //case class Range(s: Int, e: Int) extends CharClass
-  //case class Neg(c: CharClass) extends CharClass
-  //case class CCUnion(ccs: List[CharClass]) extends CharClass
-  //case class CCIntersection(ccs: List[CharClass]) extends CharClass
+  
+  // Not yet implemented.  Don't consider them terribly necessary since
+  // all these are encompassed by CCArbitrary.
+  /*
+  case class Range(s: Int, e: Int) extends CharClass
+  case class Neg(c: CharClass) extends CharClass
+  case class CCUnion(ccs: List[CharClass]) extends CharClass
+  case class CCIntersection(ccs: List[CharClass]) extends CharClass
+  */
   
   // An arbitrary subset of allPrAscChars.
   case class CCArbitrary(charSet: Set[Char]) extends CharClass
@@ -143,6 +147,9 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 	}
     }
     
+    /*
+     * Currently not called, nice to have though.
+     */
     def toPrettyString(indent: Int): String = this match {
       case CCArbitrary(cSet) => {
 	  val strSet = cSet.map(c =>
@@ -204,11 +211,6 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 	  case 'or => {
 	    val strGens = exps map((exp: RegExpAbs) => (1, exp.getAcceptStrGen))
 	    Gen.frequency(strGens: _*)
-	    // Initially tried:
-	    // Gen.oneOf(exps map(_.getAcceptStrGen))
-	    // but compiler threw a fit (type mismatch, and when Gen.oneOf
-	    // was parameterized, claimed that it the argument was still not
-	    // of the right type.)
 	  }
 	  case _ => throw new java.lang.Exception
 				("Unrecognized operation " + op)
@@ -235,15 +237,18 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
     }
   }
   
+  // Generates an arbitrary subset of the printable ascii characters.
   lazy val reCCSetGen : Gen[CharClass] =
-      Gen.someOf(allPrAscChars).map[CharClass](
-	  (ccSet: Seq[Char]) =>
-	    CCArbitrary(ccSet toSet))
+    Gen.someOf(allPrAscChars).map[CharClass](
+	(ccSet: Seq[Char]) =>
+	  CCArbitrary(ccSet toSet))
   
+  // Chooses a pre-defined character class.
   lazy val reCCPredefGen : Gen[CharClass] =
     Gen.pick(1, predefMap keySet).map[CharClass](
       (ss: Seq[Symbol]) => CCPredef(ss head))
   
+  // Generates character class consisting of a single character.
   lazy val reCCLiteralGen : Gen[CharClass] =
     Gen.pick(1, allPrAscChars).map[CharClass](
       (cs: Seq[Char]) => CCLiteral(cs head))
@@ -332,7 +337,6 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   /*
    * The following two properties check the soundness of RegExpAbs.
    */
-  
   property("Regex generator produces well-formed expressions.") =
     Prop.forAll {
       r: RegExpAbs => {
@@ -365,14 +369,15 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   }
   
   // Checks if a string is in the regex's language.
-  def inLang(re: Regex, s: String): Boolean =
+  def inLang[T <% Parser[String]](re: T, s: String): Boolean =
     parseAll(re, s) match {
         case Success(res, _) => true
 	case NoSuccess(_, _) => false
     }
   
-  def inLangAll(reTups: (Regex, String)*): Boolean = 
-    reTups forall((reTup: (Regex, String)) => inLang(reTup._1, reTup._2))
+  // Makes sure all strings are accepted by their corresponding parsers.
+  def inLangAll[T <% Parser[String]](reTups: (T, String)*): Boolean = 
+    reTups forall((reTup: (T, String)) => inLang(reTup._1, reTup._2))
   
   def reAllProp1[T <% Prop](prop: (Regex, String) => T): Prop = 
     Prop.forAll {
@@ -404,6 +409,7 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
   
   lazy val smallNonNegIntGen: Gen[Int] = Gen.choose(0, 100)
   
+  // Generator for repetitions of a string separated by "sep".
   def getRepGen(s: String, sep: String): Gen[String] = {
     for (n <- smallNonNegIntGen) yield List.fill(n)(s) mkString sep
   }
@@ -425,6 +431,7 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 	}
       })
   
+  // How much of the string did this regular expression eat?
   def amtConsumed(re: Regex, s: String): Int =
     parse(re, s) match {
       case Success(res, _) => res.length
@@ -452,9 +459,9 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
       (re: Regex, s: String) =>
       Prop.forAll {
 	sep: Char =>
-	  Prop.forAll(getRepGen(s, sep)) {
+	  Prop.forAll(getRepGen(s, sep toString)) {
 	    reps: String => {
-	      parseAll(repsep(re, "~"), reps) match {
+	      parseAll(repsep(re, sep toString), reps) match {
 		case Success(_, _) => true
 		case NoSuccess(_, _) => false
 	      }
@@ -504,6 +511,56 @@ object RegexParsersTest extends Properties("RegexParsers") with RegexParsers {
 	  })
 	)
     )
+  
+  property("rep of literal parser accepts any repetition of self") =
+    Prop.forAll {
+      a: String => {
+	val aParser = literal(a)
+	val repParser = rep(aParser)
+	(!inLang(aParser, "")) ==>
+	  Prop.forAll(getRepGen(a, "")) {
+	    repStr: String =>
+	      parseAll(repParser, repStr) match {
+		case Success(_, _) => true
+		case NoSuccess(_, _) => false
+	      }
+	  }
+      }
+    }
+  
+  property("repN of literal parser accepts n repetitions of self") =
+    Prop.forAll {
+      a: String => {
+	Prop.forAll(smallNonNegIntGen) {
+	  n: Int => {
+	    val repParser = repN(n, literal(a))
+	    parseAll(repParser, List.fill(n)(a) mkString) match {
+	      case Success(_, _) => true
+	      case NoSuccess(_, _) => false
+	    }
+	  }
+	}
+      }
+    }
+  
+  property("repsep of literal parser accepts rep of self delimited by sep") =
+    Prop.forAll {
+      a: String => {
+	val aParser = literal(a)
+	Prop.forAll {
+	  sep: Char => {
+	    val repParser = repsep(aParser, sep toString)
+	    Prop.forAll(getRepGen(a, sep toString)) {
+	      repStr: String =>
+		parseAll(repParser, repStr) match {
+		  case Success(_, _) => true
+		  case NoSuccess(_, _) => false
+		}
+	    }
+	  }
+	}
+      }
+    }
   
   property("~ of two literal parsers accepts concatenation") =
     Prop.forAll {
